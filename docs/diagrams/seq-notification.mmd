@@ -1,0 +1,15 @@
+sequenceDiagram
+  participant E as Incident engine
+  participant DB as PostgreSQL
+  participant W as Notify worker
+  participant T as Telegram
+  E->>DB: INSERT notification (PENDING) in same transaction
+  W->>DB: select due notifications
+  W->>T: sendMessage
+  alt success
+    W->>DB: status SENT
+  else failure
+    W->>DB: attempts++, next_attempt_at = backoff
+    Note over W,DB: after max retries status FAILED
+  end
+  Note over E,W: Telegram not configured: status SKIPPED, nothing sent

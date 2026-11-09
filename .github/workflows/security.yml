@@ -1,0 +1,92 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: pip-audit (backend)
+        run: |
+          pip install -e backend pip-audit
+          pip-audit --strict
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: npm audit (frontend, high and above)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.28.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # CLI instead of gitleaks-action: the action requires a paid license key for organization-owned repos.
+      - name: Install gitleaks (checksum verified)
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -fsSL -o gitleaks.tgz "${base}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o checksums.txt "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep "linux_x64.tar.gz" checksums.txt | sed 's/ .*/  gitleaks.tgz/' | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+      - name: Scan full git history
+        run: ./gitleaks git --no-banner --redact -v
+
+  license-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python dependency licenses
+        run: |
+          pip install -e backend pip-licenses
+          pip-licenses --from=mixed --format=markdown --fail-on="GPL-3.0-only;GPL-3.0-or-later;AGPL-3.0-only;AGPL-3.0-or-later" --ignore-packages iguard-backend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Node dependency licenses
+        working-directory: frontend
+        run: |
+          npm ci
+          npx --yes license-checker-rseidelsohn@4 --production --failOn "GPL-3.0;AGPL-3.0;GPL-3.0-only;AGPL-3.0-only" --summary
+
+  image-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images
+        run: |
+          docker build -t iguard-backend:ci backend
+          docker build -t iguard-frontend:ci frontend
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: iguard-backend:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: iguard-frontend:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"

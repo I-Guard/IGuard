@@ -1,0 +1,54 @@
+groups:
+  - name: iguard-alerts
+    rules:
+      - alert: HostHighCpu
+        expr: iguard:node_cpu_usage_percent > 85
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "High CPU on {{ $labels.instance }}"
+          description: "CPU usage {{ $value | printf \"%.1f\" }}% for 5 minutes."
+      - alert: HostHighMemory
+        expr: iguard:node_memory_usage_percent > 90
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage {{ $value | printf \"%.1f\" }}%."
+      - alert: HostDiskSpaceLow
+        expr: iguard:node_disk_usage_percent > 85
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "Disk space low on {{ $labels.instance }}"
+          description: "Root filesystem {{ $value | printf \"%.1f\" }}% full."
+      - alert: TargetDown
+        expr: up == 0
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: "Scrape target {{ $labels.job }}/{{ $labels.instance }} is down"
+      - alert: EndpointDown
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "Endpoint {{ $labels.instance }} is failing its health probe"
+      - alert: HighProbeLatency
+        expr: probe_duration_seconds{job="blackbox-http"} > 1
+        for: 3m
+        labels: {severity: warning}
+        annotations:
+          summary: "Slow responses from {{ $labels.instance }}"
+          description: "Probe took {{ $value | printf \"%.2f\" }}s."
+      - alert: ContainerDown
+        expr: time() - container_last_seen{name=~"iguard-.+"} > 60
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "Container {{ $labels.name }} has disappeared"
+      - alert: ContainerRestarting
+        expr: changes(container_start_time_seconds{name=~"iguard-.+"}[10m]) >= 3
+        labels: {severity: warning}
+        annotations:
+          summary: "Container {{ $labels.name }} restarted {{ $value }} times in 10 minutes"

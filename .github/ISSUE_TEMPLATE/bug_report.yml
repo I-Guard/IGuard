@@ -1,0 +1,22 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: "What happened?", description: "Include expected vs. actual behavior." }
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes: { label: "Steps to reproduce" }
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes: { label: "IGuard version", placeholder: "1.0.0" }
+    validations: { required: true }
+  - type: textarea
+    id: env
+    attributes: { label: "Environment", description: "OS, Docker version, browser. Do NOT paste secrets, tokens or .env contents." }
+  - type: textarea
+    id: logs
+    attributes: { label: "Relevant logs", render: text, description: "Redact secrets and personal data before pasting." }

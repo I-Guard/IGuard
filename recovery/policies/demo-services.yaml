@@ -1,0 +1,66 @@
+# Allowlist of recovery actions. API users can only INVOKE these; they can never create or edit them.
+# Targets must be plain container/script names. Critical infrastructure (database, monitoring,
+# docker, iguard itself) is rejected by the policy loader unless allow_critical + sensitive are set.
+actions:
+  - key: restart-game-api
+    name: Restart game-api container
+    description: Restarts the synthetic game API container and verifies its health endpoint.
+    action_type: CONTAINER_RESTART
+    target: iguard-game-api
+    service: game-api
+    auto_trigger: true
+    trigger_categories: [SERVICE_DOWN, HTTP_5XX, CONTAINER_FAILURE]
+    cooldown_seconds: 120
+    max_attempts_per_hour: 4
+    verify_after_seconds: 5
+
+  - key: restart-game-web
+    name: Restart game-web container
+    action_type: CONTAINER_RESTART
+    target: iguard-game-web
+    service: game-web
+    auto_trigger: true
+    trigger_categories: [SERVICE_DOWN, HTTP_5XX, CONTAINER_FAILURE]
+    cooldown_seconds: 120
+    verify_after_seconds: 5
+
+  - key: restart-leaderboard
+    name: Restart leaderboard-service container
+    action_type: CONTAINER_RESTART
+    target: iguard-leaderboard-service
+    service: leaderboard-service
+    auto_trigger: true
+    trigger_categories: [SERVICE_DOWN, CONTAINER_FAILURE, CONTAINER_RESTARTS]
+    cooldown_seconds: 180
+    verify_after_seconds: 5
+
+  - key: restart-auth-service
+    name: Restart authentication-service container (manual)
+    description: Manual only - authentication outages deserve a human decision.
+    action_type: CONTAINER_RESTART
+    target: iguard-authentication-service
+    service: authentication-service
+    auto_trigger: false
+    cooldown_seconds: 300
+    verify_after_seconds: 5
+
+  - key: restart-wallet-mock
+    name: Restart wallet-mock container (ADMIN approval)
+    description: Sensitive. Requires ADMIN role and explicit confirmation; never automatic.
+    action_type: CONTAINER_RESTART
+    target: iguard-wallet-mock
+    service: wallet-mock
+    sensitive: true
+    min_role: ADMIN
+    auto_trigger: false
+    cooldown_seconds: 300
+    verify_after_seconds: 5
+
+  - key: clear-demo-cache
+    name: Run clear-demo-cache script
+    description: Runs the allowlisted recovery/scripts/clear-demo-cache.sh (arguments are never accepted).
+    action_type: SCRIPT
+    target: clear-demo-cache.sh
+    service: game-api
+    requires_dry_run: true
+    cooldown_seconds: 60

@@ -1,0 +1,194 @@
+{
+  "uid": "iguard-logs",
+  "title": "Centralized Logs",
+  "tags": [
+    "iguard",
+    "logs",
+    "loki"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "iguard-loki"
+        },
+        "label": "Service",
+        "refresh": 2,
+        "query": {
+          "label": "service",
+          "refId": "v",
+          "stream": "",
+          "type": 1
+        },
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".+",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "level",
+        "type": "custom",
+        "label": "Level",
+        "query": "debug,info,warning,error,critical",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".+",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "search",
+        "type": "textbox",
+        "label": "Contains",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Log volume by level",
+      "datasource": {
+        "type": "loki",
+        "uid": "iguard-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "iguard-loki"
+          },
+          "queryType": "range",
+          "legendFormat": "{{level}}",
+          "expr": "sum by (level) (count_over_time({service=~\"$service\", level=~\"$level\"}[$__interval]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 7
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Errors by service",
+      "datasource": {
+        "type": "loki",
+        "uid": "iguard-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "iguard-loki"
+          },
+          "queryType": "range",
+          "legendFormat": "{{service}}",
+          "expr": "sum by (service) (count_over_time({service=~\"$service\", level=~\"error|critical\"}[$__interval]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 6
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "iguard-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "iguard-loki"
+          },
+          "expr": "{service=~\"$service\", level=~\"$level\"} |~ \"(?i)$search\"",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 16
+      }
+    }
+  ]
+}

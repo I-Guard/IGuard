@@ -1,0 +1,24 @@
+sequenceDiagram
+  participant W as Detector worker
+  participant P as Prometheus
+  participant C as Service checker
+  participant E as Incident engine
+  participant DB as PostgreSQL
+  participant N as Notification outbox
+  W->>W: acquire advisory lock (leader only)
+  W->>P: query CPU, memory, disk, targets
+  alt Prometheus unreachable or no data
+    P--xW: error / empty
+    W->>W: skip metric rules (never open or clear)
+  else data available
+    P-->>W: samples
+    W->>E: observe(rule, subject, breached)
+  end
+  C->>E: observe(availability / latency)
+  E->>DB: lookup active incident by fingerprint
+  alt none and sustained breach
+    E->>DB: INSERT incident (unique partial index guards races)
+    E->>N: enqueue INCIDENT_OPENED
+  else exists
+    E->>DB: occurrences++, last_seen_at
+  end

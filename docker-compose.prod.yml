@@ -1,0 +1,36 @@
+# Production overlay:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# - production mode (strict secret validation, SQLite refused, secure cookies)
+# - demo services and failure-injection endpoints disabled (profile `demo` must be requested)
+# - UI bound per IGUARD_BIND_ADDR (put a TLS terminating reverse proxy in front)
+# Recovery stays allowlist-only; sensitive actions still require ADMIN confirmation.
+services:
+  backend:
+    environment:
+      IGUARD_ENV: production
+      IGUARD_COOKIE_SECURE: "true"
+      IGUARD_SEED_DEMO: "false"
+      IGUARD_RECOVERY_ADAPTER: agent
+    restart: always
+  frontend:
+    restart: always
+  postgres:
+    restart: always
+  recovery-agent:
+    restart: always
+    environment:
+      IGUARD_ENV: production
+  game-api: &demo-off
+    profiles: ["demo"]
+    environment: {DEMO_CONTROL_ENABLED: "false", IGUARD_ENV: production, SERVICE_NAME: game-api}
+  game-web:
+    <<: *demo-off
+    environment: {DEMO_CONTROL_ENABLED: "false", IGUARD_ENV: production, SERVICE_NAME: game-web}
+  wallet-mock:
+    <<: *demo-off
+    environment: {DEMO_CONTROL_ENABLED: "false", IGUARD_ENV: production, SERVICE_NAME: wallet-mock}
+  authentication-service:
+    <<: *demo-off
+    environment: {DEMO_CONTROL_ENABLED: "false", IGUARD_ENV: production, SERVICE_NAME: authentication-service}
+  leaderboard-service:
+    <<: *demo-off
+    environment: {DEMO_CONTROL_ENABLED: "false", IGUARD_ENV: production, SERVICE_NAME: leaderboard-service}

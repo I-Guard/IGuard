@@ -1,0 +1,22 @@
+groups:
+  - name: iguard-recording
+    interval: 15s
+    rules:
+      # Percent of non-idle CPU per host (all cores averaged)
+      - record: iguard:node_cpu_usage_percent
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100)
+      - record: iguard:node_cpu_core_usage_percent
+        expr: 100 - (avg by (instance, cpu) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100)
+      - record: iguard:node_memory_usage_percent
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
+      # Root filesystem usage (ignores pseudo filesystems)
+      - record: iguard:node_disk_usage_percent
+        expr: >
+          100 - (node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs|rootfs"}
+          / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs|rootfs"} * 100)
+      - record: iguard:container_cpu_usage_cores
+        expr: sum by (name) (rate(container_cpu_usage_seconds_total{name!=""}[2m]))
+      - record: iguard:container_memory_working_set_bytes
+        expr: sum by (name) (container_memory_working_set_bytes{name!=""})
+      - record: iguard:probe_availability_ratio_1h
+        expr: avg_over_time(probe_success[1h])

@@ -1,0 +1,13 @@
+# Example: a sensitive, manual-only action for a payment-adjacent service.
+# Copy into recovery/policies/ and adjust. Policies are validated at startup (make validate-config).
+actions:
+  - key: restart-payments-gateway-sandbox
+    name: Restart payments gateway sandbox (ADMIN approval)
+    action_type: CONTAINER_RESTART
+    target: acme-payments-sandbox
+    sensitive: true
+    min_role: ADMIN
+    auto_trigger: false
+    requires_dry_run: true
+    cooldown_seconds: 600
+    max_attempts_per_hour: 2

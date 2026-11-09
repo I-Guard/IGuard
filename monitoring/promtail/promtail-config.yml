@@ -1,0 +1,49 @@
+server:
+  http_listen_port: 9080
+  log_level: warn
+positions:
+  filename: /positions/positions.yaml
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Docker container logs (via a READ-ONLY docker-socket-proxy: GET container list/logs only, no POST)
+  - job_name: docker
+    docker_sd_configs:
+      - host: tcp://docker-proxy-ro:2375
+        refresh_interval: 10s
+        filters:
+          - name: label
+            values: ["com.docker.compose.project=iguard"]
+    relabel_configs:
+      - source_labels: [__meta_docker_container_name]
+        regex: "/(.*)"
+        target_label: container
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: compose_service
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+      - target_label: job
+        replacement: docker
+    pipeline_stages:
+      # IGuard & demo services log JSON: promote severity/service/env to labels
+      - json:
+          expressions:
+            severity: severity
+            svc: service
+            environment: environment
+            message: message
+      - labels:
+          environment:
+      - template:
+          source: level
+          template: "{{ ToLower .severity }}"
+      - labels:
+          level:
+      # Defence in depth: redact secrets before they ever reach Loki
+      - replace:
+          expression: '(?i)("(?:password|token|authorization|secret|api_key)"\s*:\s*")[^"]*(")'
+          replace: '${1}***REDACTED***${2}'
+      - replace:
+          expression: '(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+'
+          replace: '${1}***REDACTED***'

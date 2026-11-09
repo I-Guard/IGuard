@@ -1,0 +1,15 @@
+sequenceDiagram
+  participant B as Browser
+  participant API as Backend
+  B->>API: POST /auth/login (identifier, password)
+  API->>API: rate limit, lockout check, Argon2id verify
+  API-->>B: access token (body) + CSRF token (body) + refresh cookie (httpOnly)
+  B->>API: GET /... Authorization Bearer access token
+  Note over B: access token held in memory only
+  B->>API: POST /auth/refresh (cookie + X-CSRF-Token)
+  API->>API: rotate refresh token, detect reuse
+  API-->>B: new access token + new refresh cookie
+  alt refresh token reused
+    API->>API: revoke whole session
+    API-->>B: 401
+  end

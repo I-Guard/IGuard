@@ -1,0 +1,24 @@
+sequenceDiagram
+  actor U as Operator
+  participant API as Backend API
+  participant S as RecoveryService
+  participant A as Adapter
+  participant R as Recovery agent
+  participant D as Docker (via proxy)
+  U->>API: POST /recovery/actions/{id}/dry-run
+  API->>S: dry_run (policy, role, breaker checks)
+  S-->>U: DRY_RUN_OK (nothing changed)
+  U->>API: POST /recovery/actions/{id}/execute (Idempotency-Key)
+  API->>S: execute
+  S->>S: dry-run within 15 min? cooldown? hourly limit? breaker closed? sensitive needs ADMIN + confirm
+  S->>A: run(action)
+  A->>R: signed request (HMAC, timestamp, nonce)
+  R->>R: verify signature, replay cache, allowlist
+  R->>D: restart allowlisted container only
+  D-->>R: ok
+  R-->>A: result
+  loop verification attempts
+    S->>S: re-check service health
+  end
+  S->>S: record SUCCEEDED / VERIFICATION_FAILED, update breaker
+  S-->>U: execution record

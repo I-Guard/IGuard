@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iguard-backend"
+version = "1.0.0"
+description = "IGuard - iGaming Infrastructure Guardian backend API"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Matin Alijani", email = "Matin.alijani@gmail.com" }]
+dependencies = [
+  "fastapi==0.162.0",
+  "uvicorn[standard]==0.54.0",
+  "pydantic==2.14.2",
+  "pydantic-settings==2.16.2",
+  "SQLAlchemy==2.1.7",
+  "alembic==1.20.1",
+  "psycopg[binary]==3.3.7",
+  "httpx==0.28.1",
+  "argon2-cffi==25.1.0",
+  "PyJWT==2.15.1",
+  "PyYAML==6.0.3",
+  "email-validator==2.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.2.0",
+  "pytest-cov==7.1.0",
+  "ruff==0.17.3",
+  "mypy==2.4.1",
+  "types-PyYAML==6.0.12.20261103",
+  "pip-audit==2.9.0",
+  "pip-licenses==5.5.5",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+  "integration: needs external services (PostgreSQL); skipped when unavailable",
+]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "SIM", "C4"]
+ignore = ["B008", "S101", "E501", "UP046", "UP047"]
+
+[tool.ruff.lint.isort]
+known-third-party = ["alembic"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106", "S108", "S311", "E731", "C408"]
+"app/schemas/auth.py" = ["S105"]
+"app/database/seed.py" = ["S311"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+strict = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+ignore_missing_imports = true
+exclude = ["alembic/versions", "tests"]

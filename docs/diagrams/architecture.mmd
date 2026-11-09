@@ -1,0 +1,21 @@
+flowchart LR
+  user([Operator / Admin / Viewer]) -->|HTTPS or localhost| fe[Frontend - Nginx + React SPA]
+  fe -->|/api/v1| be[Backend - FastAPI]
+  be --> pg[(PostgreSQL)]
+  be -->|PromQL| prom[Prometheus]
+  be -->|LogQL| loki[Loki]
+  be -->|alerts| am[Alertmanager]
+  be -->|synthetic checks| apps[Monitored services]
+  be -->|HMAC-signed request| agent[Recovery agent]
+  agent -->|restart-only| dsp[docker-socket-proxy]
+  dsp --> docker{{Docker Engine}}
+  be -->|optional| tg[Telegram Bot API]
+  am -->|webhook + bearer token| be
+  prom --> ne[node-exporter]
+  prom --> cadv[cAdvisor]
+  prom --> bb[blackbox-exporter]
+  prom -->|rules| am
+  promtail[Promtail] --> loki
+  promtail -->|read-only| dspro[docker-socket-proxy ro]
+  graf[Grafana] --> prom
+  graf --> loki

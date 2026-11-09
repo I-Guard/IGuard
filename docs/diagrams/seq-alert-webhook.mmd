@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant Pm as Prometheus
+  participant Am as Alertmanager
+  participant API as Backend webhook
+  participant E as Incident engine
+  participant N as Outbox
+  participant T as Telegram (optional)
+  Pm->>Am: firing alert
+  Am->>API: POST /alerts/webhook (Bearer token)
+  API->>API: constant-time token check
+  API->>E: upsert incident by fingerprint (dedup)
+  E->>N: enqueue notification
+  N->>T: send (retry with backoff, token redacted in logs)
+  T-->>N: 200 / failure recorded

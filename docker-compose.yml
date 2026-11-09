@@ -1,0 +1,326 @@
+# IGuard - development / demo stack.  Start with:  docker compose up -d --build
+# Production hardening lives in docker-compose.prod.yml (see docs/deployment.md).
+#
+# Network segmentation (all but `web` and `egress` are internal: no inbound or outbound internet)
+#   web       published UI + Grafana only
+#   api       frontend (nginx) <-> backend
+#   data      backend <-> postgres
+#   mon       observability plane (prometheus, loki, alertmanager, exporters)
+#   apps      synthetic demo services (probed by IGuard + blackbox)
+#   recovery  backend <-> recovery agent <-> restart-only docker proxy
+#   egress    backend only (Telegram API)
+name: iguard
+
+x-restart: &restart
+  restart: unless-stopped
+
+x-hardening: &hardening
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+
+x-demo-service: &demo-service
+  build: ./services/demo-service
+  <<: [*restart, *hardening]
+  read_only: true
+  tmpfs: ["/tmp"]
+  environment: &demo-env
+    IGUARD_ENV: ${IGUARD_ENV:-development}
+    DEMO_CONTROL_ENABLED: ${DEMO_CONTROL_ENABLED:-true}
+  networks: [apps]
+  deploy: {resources: {limits: {cpus: "0.25", memory: 96M}}}
+  labels: {com.iguard.role: demo-service}
+
+services:
+  # ------------------------------------------------------------------ application
+  frontend:
+    build: ./frontend
+    <<: [*restart, *hardening]
+    read_only: true
+    tmpfs: ["/tmp"]
+    ports:
+      - "${IGUARD_BIND_ADDR:-127.0.0.1}:${IGUARD_HTTP_PORT:-8080}:8080"
+    depends_on:
+      backend: {condition: service_healthy}
+    networks: [web, api]
+    deploy: {resources: {limits: {cpus: "0.5", memory: 128M}}}
+
+  backend:
+    build: ./backend
+    <<: [*restart, *hardening]
+    read_only: true
+    tmpfs: ["/tmp"]
+    environment:
+      IGUARD_ENV: ${IGUARD_ENV:-development}
+      IGUARD_DATABASE_URL: postgresql+psycopg://iguard:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/iguard
+      IGUARD_SECRET_KEY: ${IGUARD_SECRET_KEY:?set IGUARD_SECRET_KEY in .env (run scripts/install.sh)}
+      IGUARD_WEBHOOK_TOKEN: ${IGUARD_WEBHOOK_TOKEN:?set IGUARD_WEBHOOK_TOKEN in .env}
+      IGUARD_CORS_ORIGINS: ${IGUARD_CORS_ORIGINS:-http://localhost:8080}
+      IGUARD_COOKIE_SECURE: ${IGUARD_COOKIE_SECURE:-false}
+      IGUARD_BOOTSTRAP_ADMIN_EMAIL: ${IGUARD_BOOTSTRAP_ADMIN_EMAIL:-}
+      IGUARD_BOOTSTRAP_ADMIN_PASSWORD: ${IGUARD_BOOTSTRAP_ADMIN_PASSWORD:-}
+      IGUARD_SEED_DEMO: ${IGUARD_SEED_DEMO:-true}
+      IGUARD_SEED_PASSWORD: ${IGUARD_SEED_PASSWORD:-}
+      IGUARD_WORKERS_ENABLED: "true"
+      IGUARD_PROMETHEUS_URL: http://prometheus:9090
+      IGUARD_ALERTMANAGER_URL: http://alertmanager:9093
+      IGUARD_LOKI_URL: http://loki:3100
+      IGUARD_RECOVERY_ADAPTER: ${IGUARD_RECOVERY_ADAPTER:-agent}
+      IGUARD_RECOVERY_AGENT_URL: http://recovery-agent:8088
+      IGUARD_RECOVERY_AGENT_SECRET: ${RECOVERY_AGENT_SECRET:?set RECOVERY_AGENT_SECRET in .env}
+      IGUARD_RECOVERY_POLICIES_DIR: /recovery/policies
+      IGUARD_RECOVERY_SIMULATED_HEAL_MAP: ${IGUARD_RECOVERY_SIMULATED_HEAL_MAP:-}
+      IGUARD_TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      IGUARD_TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - ./recovery/policies:/recovery/policies:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [api, data, mon, apps, recovery, egress]
+    stop_grace_period: 30s
+    deploy: {resources: {limits: {cpus: "1.0", memory: 384M}}}
+
+  postgres:
+    image: postgres:16.6-alpine
+    <<: *restart
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      POSTGRES_USER: iguard
+      POSTGRES_DB: iguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iguard -d iguard"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [data]      # never published, only reachable by the backend
+    deploy: {resources: {limits: {cpus: "1.0", memory: 512M}}}
+
+  # ------------------------------------------------------------------ recovery plane
+  recovery-agent:
+    build: ./recovery/agent
+    <<: [*restart, *hardening]
+    read_only: true
+    tmpfs: ["/tmp"]
+    environment:
+      RECOVERY_AGENT_SECRET: ${RECOVERY_AGENT_SECRET:?set RECOVERY_AGENT_SECRET in .env}
+      RECOVERY_POLICIES_DIR: /policies
+      RECOVERY_SCRIPTS_DIR: /scripts
+      DOCKER_PROXY_HOST: docker-proxy-recovery
+      DOCKER_PROXY_PORT: "2375"
+      IGUARD_ENV: ${IGUARD_ENV:-development}
+    volumes:
+      - ./recovery/policies:/policies:ro
+      - ./recovery/scripts:/scripts:ro
+    networks: [recovery]
+    deploy: {resources: {limits: {cpus: "0.25", memory: 96M}}}
+
+  # Restart-only Docker API proxy. The raw docker.sock is mounted ONLY here (read-only) and the
+  # proxy filters the API: container inspect + restart, nothing else (no exec, no create, no images).
+  docker-proxy-recovery:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    <<: *restart
+    environment:
+      CONTAINERS: "1"
+      POST: "1"
+      ALLOW_RESTARTS: "1"
+      EXEC: "0"
+      IMAGES: "0"
+      VOLUMES: "0"
+      NETWORKS: "0"
+      SERVICES: "0"
+      TASKS: "0"
+      SECRETS: "0"
+      AUTH: "0"
+      INFO: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [recovery]
+    deploy: {resources: {limits: {cpus: "0.25", memory: 64M}}}
+
+  # Read-only proxy used by Promtail for container log discovery: GET only.
+  docker-proxy-ro:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    <<: *restart
+    environment:
+      CONTAINERS: "1"
+      POST: "0"
+      INFO: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [mon]
+    deploy: {resources: {limits: {cpus: "0.25", memory: 64M}}}
+
+  # ------------------------------------------------------------------ observability
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    <<: [*restart, *hardening]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle=false
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/healthy"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    networks: [mon, apps]
+    deploy: {resources: {limits: {cpus: "1.0", memory: 512M}}}
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    <<: [*restart, *hardening]
+    environment:
+      IGUARD_WEBHOOK_TOKEN: ${IGUARD_WEBHOOK_TOKEN:?set IGUARD_WEBHOOK_TOKEN in .env}
+    # Render the webhook token into the config at start (the file in git contains no secret).
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sed "s|\$${IGUARD_WEBHOOK_TOKEN}|$$IGUARD_WEBHOOK_TOKEN|" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9093/-/healthy"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    networks: [mon]
+    deploy: {resources: {limits: {cpus: "0.25", memory: 128M}}}
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    <<: [*restart, *hardening]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SECURITY_COOKIE_SECURE: ${IGUARD_COOKIE_SECURE:-false}
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${IGUARD_BIND_ADDR:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
+    depends_on: [prometheus, loki]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+    networks: [web, mon]
+    deploy: {resources: {limits: {cpus: "0.5", memory: 256M}}}
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    <<: *restart
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /:/host:ro,rslave
+    networks: [mon]
+    deploy: {resources: {limits: {cpus: "0.25", memory: 64M}}}
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    <<: *restart
+    privileged: true     # cAdvisor needs host cgroup access; exposed to the internal `mon` network only
+    devices: ["/dev/kmsg"]
+    command: ["--docker_only=true", "--housekeeping_interval=15s", "--store_container_labels=false",
+              "--whitelisted_container_labels=com.docker.compose.service"]
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [mon]
+    deploy: {resources: {limits: {cpus: "0.5", memory: 256M}}}
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    <<: [*restart, *hardening]
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./monitoring/blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [mon, apps]
+    deploy: {resources: {limits: {cpus: "0.25", memory: 64M}}}
+
+  loki:
+    image: grafana/loki:3.3.2
+    <<: [*restart, *hardening]
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    user: "10001"
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/ready | grep -q ready"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    networks: [mon]
+    deploy: {resources: {limits: {cpus: "0.5", memory: 384M}}}
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    <<: [*restart, *hardening]
+    command: ["-config.file=/etc/promtail/promtail-config.yml"]
+    volumes:
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - promtail-positions:/positions
+    depends_on: [loki, docker-proxy-ro]
+    networks: [mon]
+    deploy: {resources: {limits: {cpus: "0.25", memory: 128M}}}
+
+  # ------------------------------------------------------------------ synthetic demo services
+  game-api:
+    <<: *demo-service
+    container_name: iguard-game-api
+    environment: {<<: *demo-env, SERVICE_NAME: game-api}
+  game-web:
+    <<: *demo-service
+    container_name: iguard-game-web
+    environment: {<<: *demo-env, SERVICE_NAME: game-web}
+  wallet-mock:
+    <<: *demo-service
+    container_name: iguard-wallet-mock
+    environment: {<<: *demo-env, SERVICE_NAME: wallet-mock}
+  authentication-service:
+    <<: *demo-service
+    container_name: iguard-authentication-service
+    environment: {<<: *demo-env, SERVICE_NAME: authentication-service}
+  leaderboard-service:
+    <<: *demo-service
+    container_name: iguard-leaderboard-service
+    environment: {<<: *demo-env, SERVICE_NAME: leaderboard-service}
+
+networks:
+  web: {}
+  egress: {}
+  api: {internal: true}
+  data: {internal: true}
+  mon: {internal: true}
+  apps: {internal: true}
+  recovery: {internal: true}
+
+volumes:
+  postgres-data:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
+  loki-data:
+  promtail-positions:

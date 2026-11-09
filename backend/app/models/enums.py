@@ -1,0 +1,119 @@
+"""Enumerations shared by models, schemas and services."""
+
+from __future__ import annotations
+
+import enum
+
+
+class StrEnum(str, enum.Enum):  # noqa: UP042 - keep (str, Enum) for SQLAlchemy compatibility
+    def __str__(self) -> str:
+        return self.value
+
+
+class RoleName(StrEnum):
+    ADMIN = "ADMIN"
+    OPERATOR = "OPERATOR"
+    VIEWER = "VIEWER"
+
+
+ROLE_RANK = {RoleName.VIEWER: 1, RoleName.OPERATOR: 2, RoleName.ADMIN: 3}
+
+
+class Severity(StrEnum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    CRITICAL = "CRITICAL"
+
+
+SEVERITY_RANK = {Severity.INFO: 1, Severity.WARNING: 2, Severity.CRITICAL: 3}
+
+
+class IncidentStatus(StrEnum):
+    DETECTED = "DETECTED"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    INVESTIGATING = "INVESTIGATING"
+    RECOVERING = "RECOVERING"
+    RESOLVED = "RESOLVED"
+
+
+class IncidentCategory(StrEnum):
+    CPU = "CPU"
+    MEMORY = "MEMORY"
+    DISK = "DISK"
+    SERVICE_DOWN = "SERVICE_DOWN"
+    HTTP_5XX = "HTTP_5XX"
+    HIGH_LATENCY = "HIGH_LATENCY"
+    CONTAINER_FAILURE = "CONTAINER_FAILURE"
+    CONTAINER_RESTARTS = "CONTAINER_RESTARTS"
+    TARGET_DOWN = "TARGET_DOWN"
+    OTHER = "OTHER"
+
+
+class CheckType(StrEnum):
+    HTTP = "HTTP"
+    HTTPS = "HTTPS"
+    TCP = "TCP"
+
+
+class ServiceStatus(StrEnum):
+    UNKNOWN = "UNKNOWN"
+    UP = "UP"
+    DEGRADED = "DEGRADED"
+    DOWN = "DOWN"
+
+
+class ActionType(StrEnum):
+    CONTAINER_RESTART = "CONTAINER_RESTART"
+    SERVICE_RESTART = "SERVICE_RESTART"
+    SCRIPT = "SCRIPT"
+    HEALTH_VERIFY = "HEALTH_VERIFY"
+
+
+class ExecutionStatus(StrEnum):
+    DRY_RUN_OK = "DRY_RUN_OK"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    VERIFICATION_FAILED = "VERIFICATION_FAILED"
+    REJECTED = "REJECTED"
+
+
+class Trigger(StrEnum):
+    MANUAL = "MANUAL"
+    AUTOMATIC = "AUTOMATIC"
+
+
+class NotificationStatus(StrEnum):
+    PENDING = "PENDING"
+    SENT = "SENT"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+
+
+class NotificationEvent(StrEnum):
+    INCIDENT_CRITICAL = "INCIDENT_CRITICAL"
+    INCIDENT_WARNING = "INCIDENT_WARNING"
+    INCIDENT_ESCALATED = "INCIDENT_ESCALATED"
+    RECOVERY_STARTED = "RECOVERY_STARTED"
+    RECOVERY_SUCCEEDED = "RECOVERY_SUCCEEDED"
+    RECOVERY_FAILED = "RECOVERY_FAILED"
+    INCIDENT_RESOLVED = "INCIDENT_RESOLVED"
+    TEST = "TEST"
+
+
+class EventType(StrEnum):
+    DETECTED = "DETECTED"
+    OBSERVED = "OBSERVED"
+    SEVERITY_CHANGED = "SEVERITY_CHANGED"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    ASSIGNED = "ASSIGNED"
+    STATUS_CHANGED = "STATUS_CHANGED"
+    ESCALATED = "ESCALATED"
+    REOPENED = "REOPENED"
+    FLAPPING = "FLAPPING"
+    CORRELATED = "CORRELATED"
+    RECOVERY_STARTED = "RECOVERY_STARTED"
+    RECOVERY_SUCCEEDED = "RECOVERY_SUCCEEDED"
+    RECOVERY_FAILED = "RECOVERY_FAILED"
+    NOTE = "NOTE"
+    RESOLVED = "RESOLVED"

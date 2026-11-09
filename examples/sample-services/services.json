@@ -1,0 +1,24 @@
+[
+  {
+    "name": "checkout-api",
+    "description": "Example HTTP service check",
+    "check_type": "HTTP",
+    "url": "http://checkout-api.internal:8080/health",
+    "expected_status_codes": [200],
+    "interval_seconds": 30,
+    "timeout_seconds": 5,
+    "retry_threshold": 3,
+    "latency_threshold_ms": 800
+  },
+  {
+    "name": "postgres-tcp",
+    "description": "Example TCP reachability check",
+    "check_type": "TCP",
+    "host": "db.internal",
+    "port": 5432,
+    "interval_seconds": 30,
+    "timeout_seconds": 3,
+    "retry_threshold": 3,
+    "latency_threshold_ms": 500
+  }
+]
