@@ -24,7 +24,7 @@ jobs:
         run: |
           pip install -e backend pip-audit
           pip-audit --strict
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: npm audit (frontend, high and above)
@@ -61,7 +61,7 @@ jobs:
         run: |
           pip install -e backend pip-licenses
           pip-licenses --from=mixed --format=markdown --fail-on="GPL-3.0-only;GPL-3.0-or-later;AGPL-3.0-only;AGPL-3.0-or-later" --ignore-packages iguard-backend
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Node dependency licenses
