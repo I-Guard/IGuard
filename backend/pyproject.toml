@@ -12,7 +12,7 @@ authors = [{ name = "Matin Alijani", email = "Matin.alijani@gmail.com" }]
 dependencies = [
   "fastapi==0.162.0",
   "uvicorn[standard]==0.54.0",
-  "pydantic==2.14.2",
+  "pydantic==2.14.3",
   "pydantic-settings==2.16.2",
   "SQLAlchemy==2.1.7",
   "alembic==1.20.1",
