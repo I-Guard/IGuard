@@ -57,7 +57,7 @@ jobs:
               c.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
           PY
           alembic upgrade head && alembic check
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: backend-coverage
           path: backend/coverage.xml
@@ -127,7 +127,7 @@ jobs:
           E2E_WEBHOOK_TOKEN: ${{ env.E2E_WEBHOOK_TOKEN }}
         run: npx playwright test
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-report
           path: frontend/playwright-report
